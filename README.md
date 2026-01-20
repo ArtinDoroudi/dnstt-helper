@@ -1,17 +1,9 @@
 # dnstt-helper
 
-**Languages:** [English](README.md) | [فارسی](README-fa.md)
+<!-- **Languages:** [English](README.md) | [فارسی](README-fa.md) -->
 
 A comprehensive DNS tunnel deployment and client solution with enhanced features, performance optimizations, and cross-platform support.
 
-## Overview
-
-`dnstt-helper` makes DNS tunnel deployment and connection effortless:
-
-- **Server**: Enhanced deployment script with advanced configuration options
-- **Clients**: Cross-platform CLI binaries (Windows, macOS, Linux) with performance optimizations
-- **Mobile**: Configuration guides for Android users (Termius, SSH apps)
-- **Automation**: GitHub Actions for automated builds and releases
 
 ## Quick Start
 
