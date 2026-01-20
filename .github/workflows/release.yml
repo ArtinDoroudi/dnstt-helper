@@ -63,7 +63,8 @@ jobs:
 
       - name: Clone DNSTT source
         run: |
-          git clone --depth 1 https://www.bamsoftware.com/git/dnstt.git /tmp/dnstt-src
+          # Note: bamsoftware.com doesn't support shallow clone, so we do a full clone
+          git clone https://www.bamsoftware.com/git/dnstt.git /tmp/dnstt-src
 
       - name: Get version
         id: version

@@ -104,6 +104,8 @@ fetch_dnstt_source() {
         git pull origin "$DNSTT_BRANCH"
     else
         log_info "Cloning DNSTT repository..."
+        # Note: bamsoftware.com doesn't support shallow clone (dumb HTTP transport)
+        # so we do a full clone instead of --depth 1
         git clone --branch "$DNSTT_BRANCH" "$DNSTT_REPO" "$DNSTT_SRC_DIR"
     fi
 
