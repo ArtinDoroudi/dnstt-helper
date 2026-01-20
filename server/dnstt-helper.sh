@@ -14,7 +14,7 @@ set -e
 VERSION="1.0.0"
 
 # URLs
-DNSTT_BASE_URL="https://www.bamsoftware.com/software/dnstt"
+DNSTT_BASE_URL="https://dnstt.network"
 SCRIPT_URL="https://raw.githubusercontent.com/ArtinDoroudi/dnstt-helper/main/server/dnstt-helper.sh"
 GITHUB_RELEASES="https://github.com/ArtinDoroudi/dnstt-helper/releases"
 
@@ -460,41 +460,55 @@ download_dnstt_server() {
     local filepath="${INSTALL_DIR}/dnstt-server"
 
     if [ -f "$filepath" ]; then
-        print_status "dnstt-server already exists at $filepath"
-        
-        print_question "Do you want to re-download? (y/N): "
-        read -r redownload
-        
-        if [[ ! "$redownload" =~ ^[Yy]$ ]]; then
-            return 0
+        # Check if existing file is a valid binary (not HTML error page)
+        if file "$filepath" | grep -q "ELF"; then
+            print_status "dnstt-server already exists at $filepath"
+            
+            print_question "Do you want to re-download? (y/N): "
+            read -r redownload
+            
+            if [[ ! "$redownload" =~ ^[Yy]$ ]]; then
+                return 0
+            fi
+        else
+            print_warning "Existing dnstt-server appears corrupted, re-downloading..."
         fi
     fi
 
-    print_status "Downloading dnstt-server..."
+    print_status "Downloading dnstt-server from ${DNSTT_BASE_URL}..."
 
-    # Try official source first
-    if curl -L -o "/tmp/$filename" "${DNSTT_BASE_URL}/$filename" 2>/dev/null; then
-        print_status "Downloaded from official source"
-    else
-        # Fallback to dnstt.network
-        if curl -L -o "/tmp/$filename" "https://dnstt.network/$filename" 2>/dev/null; then
-            print_status "Downloaded from dnstt.network"
-        else
-            print_error "Failed to download dnstt-server"
-            exit 1
-        fi
+    # Download the binary
+    if ! curl -fL -o "/tmp/$filename" "${DNSTT_BASE_URL}/$filename"; then
+        print_error "Failed to download dnstt-server"
+        exit 1
+    fi
+
+    # Verify the downloaded file is actually a binary, not an HTML error page
+    if file "/tmp/$filename" | grep -q "HTML\|text"; then
+        print_error "Downloaded file appears to be HTML, not a binary."
+        print_error "The download URL may be incorrect or the server returned an error."
+        rm -f "/tmp/$filename"
+        exit 1
+    fi
+
+    if ! file "/tmp/$filename" | grep -q "ELF"; then
+        print_error "Downloaded file is not a valid Linux binary."
+        rm -f "/tmp/$filename"
+        exit 1
     fi
 
     # Download checksums and verify
     print_status "Verifying file integrity..."
     
-    if curl -L -o "/tmp/SHA256SUMS" "https://dnstt.network/SHA256SUMS" 2>/dev/null; then
+    if curl -fL -o "/tmp/SHA256SUMS" "${DNSTT_BASE_URL}/SHA256SUMS" 2>/dev/null; then
         cd /tmp
         if sha256sum -c <(grep "$filename" SHA256SUMS) 2>/dev/null; then
             print_status "SHA256 checksum verified"
         else
-            print_warning "Could not verify checksum, proceeding anyway"
+            print_warning "Checksum verification failed, but binary looks valid. Proceeding..."
         fi
+    else
+        print_warning "Could not download checksums for verification"
     fi
 
     chmod +x "/tmp/$filename"
