@@ -1,0 +1,219 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (without v prefix)'
+        required: true
+        type: string
+      draft:
+        description: 'Create as draft release'
+        required: false
+        type: boolean
+        default: true
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  build:
+    name: Build for Release
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: ''
+          - goos: linux
+            goarch: arm64
+            suffix: ''
+          - goos: linux
+            goarch: arm
+            suffix: ''
+          - goos: linux
+            goarch: '386'
+            suffix: ''
+          - goos: darwin
+            goarch: amd64
+            suffix: ''
+          - goos: darwin
+            goarch: arm64
+            suffix: ''
+          - goos: windows
+            goarch: amd64
+            suffix: '.exe'
+          - goos: windows
+            goarch: '386'
+            suffix: '.exe'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Clone DNSTT source
+        run: |
+          git clone --depth 1 https://www.bamsoftware.com/git/dnstt.git /tmp/dnstt-src
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "tag=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          cd /tmp/dnstt-src/dnstt-client
+          go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" \
+            -trimpath \
+            -o ${{ github.workspace }}/dnstt-client-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} \
+            .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dnstt-client-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dnstt-client-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f -name 'dnstt-client-*' -exec mv {} release/ \;
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum dnstt-client-* > SHA256SUMS
+          sha1sum dnstt-client-* > SHA1SUMS
+          md5sum dnstt-client-* > MD5SUMS
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "tag=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate release notes
+        run: |
+          cat > release/RELEASE_NOTES.md << 'EOF'
+          # dnstt-helper ${{ steps.version.outputs.tag }}
+
+          ## Downloads
+
+          ### Client Binaries
+
+          | Platform | Architecture | Download |
+          |----------|--------------|----------|
+          | Windows | x64 | `dnstt-client-windows-amd64.exe` |
+          | Windows | x86 | `dnstt-client-windows-386.exe` |
+          | macOS | Intel | `dnstt-client-darwin-amd64` |
+          | macOS | Apple Silicon | `dnstt-client-darwin-arm64` |
+          | Linux | x64 | `dnstt-client-linux-amd64` |
+          | Linux | ARM64 | `dnstt-client-linux-arm64` |
+          | Linux | ARM | `dnstt-client-linux-arm` |
+          | Linux | x86 | `dnstt-client-linux-386` |
+
+          ### Server Installation
+
+          ```bash
+          bash <(curl -Ls https://raw.githubusercontent.com/ArtinDoroudi/dnstt-helper/main/server/dnstt-helper.sh)
+          ```
+
+          ## Verification
+
+          Verify your download using the checksum files:
+
+          ```bash
+          # Linux/macOS
+          sha256sum -c SHA256SUMS
+
+          # Windows (PowerShell)
+          Get-FileHash <filename> -Algorithm SHA256
+          ```
+
+          ## Quick Start
+
+          1. Download the client for your platform
+          2. Get your server's public key from your server setup
+          3. Run:
+             ```bash
+             ./dnstt-client -udp DNS_SERVER:53 -pubkey-file server.pub t.example.com 127.0.0.1:7000
+             ```
+
+          ## Documentation
+
+          - [Server Setup Guide](https://github.com/ArtinDoroudi/dnstt-helper/blob/main/docs/server-setup.md)
+          - [Client Usage Guide](https://github.com/ArtinDoroudi/dnstt-helper/blob/main/docs/client-usage.md)
+          - [Android Guides](https://github.com/ArtinDoroudi/dnstt-helper/tree/main/android)
+          - [Troubleshooting](https://github.com/ArtinDoroudi/dnstt-helper/blob/main/docs/troubleshooting.md)
+
+          ## Checksums (SHA256)
+
+          ```
+          EOF
+          cat release/SHA256SUMS >> release/RELEASE_NOTES.md
+          echo '```' >> release/RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: dnstt-helper ${{ steps.version.outputs.tag }}
+          body_path: release/RELEASE_NOTES.md
+          draft: ${{ github.event.inputs.draft || false }}
+          files: |
+            release/dnstt-client-*
+            release/SHA256SUMS
+            release/SHA1SUMS
+            release/MD5SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## Release ${{ steps.version.outputs.tag }} Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Release Files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          ls -la release/ >> $GITHUB_STEP_SUMMARY
+

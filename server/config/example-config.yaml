@@ -1,0 +1,51 @@
+# DNSTT Helper Client Configuration
+# Copy this file and customize for your setup
+
+# Your tunnel domain (from server setup)
+domain: t.example.com
+
+# Local address where tunnel will be available
+local_addr: 127.0.0.1:7000
+
+# Server public key (get from server setup)
+# Use either pubkey (inline) or pubkey_file (path to file)
+pubkey_file: server.pub
+# pubkey: "your-hex-key-here"
+
+# DNS resolvers to use (in order of preference)
+# Types: udp, doh (DNS-over-HTTPS), dot (DNS-over-TLS)
+resolvers:
+  # Google DNS (UDP)
+  - type: udp
+    addr: 8.8.8.8:53
+    priority: 1
+  
+  # Cloudflare DNS (UDP)
+  - type: udp
+    addr: 1.1.1.1:53
+    priority: 2
+  
+  # Google DNS-over-HTTPS
+  - type: doh
+    url: https://dns.google/dns-query
+    priority: 3
+  
+  # Google DNS-over-TLS
+  - type: dot
+    addr: dns.google:853
+    priority: 4
+
+# MTU settings
+# "auto" - auto-detect optimal MTU
+# Or specify a number: 1232, 1200, 512, etc.
+mtu: auto
+
+# Enable automatic failover to next resolver on errors
+failover: true
+
+# Number of retry attempts before giving up
+retry_count: 3
+
+# Connection timeout in seconds
+timeout: 10
+

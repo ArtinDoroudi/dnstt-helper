@@ -1,0 +1,32 @@
+{
+    "domain": "t.example.com",
+    "local_addr": "127.0.0.1:7000",
+    "pubkey_file": "server.pub",
+    "resolvers": [
+        {
+            "type": "udp",
+            "addr": "8.8.8.8:53",
+            "priority": 1
+        },
+        {
+            "type": "udp",
+            "addr": "1.1.1.1:53",
+            "priority": 2
+        },
+        {
+            "type": "doh",
+            "url": "https://dns.google/dns-query",
+            "priority": 3
+        },
+        {
+            "type": "dot",
+            "addr": "dns.google:853",
+            "priority": 4
+        }
+    ],
+    "mtu": "auto",
+    "failover": true,
+    "retry_count": 3,
+    "timeout": 10
+}
+

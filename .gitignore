@@ -1,0 +1,36 @@
+# Build outputs
+dist/
+*.exe
+dnstt-client-*
+dnstt-helper-client-*
+
+# Go
+*.test
+*.out
+go.sum
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# Logs
+*.log
+
+# Downloaded sources
+/tmp/
+
+# Local test files
+*.local
+test-*
+

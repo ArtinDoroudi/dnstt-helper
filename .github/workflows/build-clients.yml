@@ -1,0 +1,160 @@
+name: Build Clients
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clients/**'
+      - '.github/workflows/build-clients.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'clients/**'
+      - '.github/workflows/build-clients.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build'
+        required: false
+        default: ''
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  build:
+    name: Build Clients
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: ''
+          - goos: linux
+            goarch: arm64
+            suffix: ''
+          - goos: linux
+            goarch: arm
+            suffix: ''
+          - goos: linux
+            goarch: '386'
+            suffix: ''
+          - goos: darwin
+            goarch: amd64
+            suffix: ''
+          - goos: darwin
+            goarch: arm64
+            suffix: ''
+          - goos: windows
+            goarch: amd64
+            suffix: '.exe'
+          - goos: windows
+            goarch: '386'
+            suffix: '.exe'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Clone DNSTT source
+        run: |
+          git clone --depth 1 https://www.bamsoftware.com/git/dnstt.git /tmp/dnstt-src
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [ -f VERSION ]; then
+            echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
+          else
+            echo "version=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          cd /tmp/dnstt-src/dnstt-client
+          go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" \
+            -trimpath \
+            -o ${{ github.workspace }}/dnstt-client-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} \
+            .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dnstt-client-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dnstt-client-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}
+          retention-days: 7
+
+  checksums:
+    name: Generate Checksums
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten directory
+        run: |
+          mkdir -p dist
+          find artifacts -type f -name 'dnstt-client-*' -exec mv {} dist/ \;
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum dnstt-client-* > SHA256SUMS
+          sha1sum dnstt-client-* > SHA1SUMS
+          md5sum dnstt-client-* > MD5SUMS
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: |
+            dist/SHA256SUMS
+            dist/SHA1SUMS
+            dist/MD5SUMS
+          retention-days: 7
+
+  summary:
+    name: Build Summary
+    needs: [build, checksums]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Show build summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Binary | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
+          find artifacts -type f -name 'dnstt-client-*' | while read file; do
+            name=$(basename "$file")
+            size=$(du -h "$file" | cut -f1)
+            echo "| $name | $size |" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Checksums" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat artifacts/checksums/SHA256SUMS >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
